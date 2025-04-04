@@ -152,6 +152,7 @@ private:
     void createGraphicsPipeline();
     void createFramebuffers();
     void createCommandPool();
+    void createDepthResources();
     void createVertexBuffer();
     void createIndexBuffer();
     void createUniformBuffers();
@@ -221,9 +222,15 @@ private:
     vk::SwapchainKHR swapChain = nullptr;
     std::vector<vk::Image> swapChainImages;
     vk::Format swapChainImageFormat;
-    vk::Extent2D swapChainExtent; // Still need this member
+    vk::Extent2D swapChainExtent;
     std::vector<vk::ImageView> swapChainImageViews;
     std::vector<vk::Framebuffer> swapChainFramebuffers;
+
+    // Depth Buffer Resources (NEW)
+    vk::Image depthImage = nullptr;
+    vk::DeviceMemory depthImageMemory = nullptr;
+    vk::ImageView depthImageView = nullptr;
+    vk::Format depthFormat;
 
     // Pipeline & Rendering
     vk::RenderPass renderPass = nullptr;
@@ -315,6 +322,10 @@ private:
     // --- Members ---
     std::unique_ptr<InputManager> inputManager; // Input Manager instance
     Camera camera; // Camera instance
+
+    // Helper functions
+    vk::Format findSupportedFormat(const std::vector<vk::Format>& candidates, vk::ImageTiling tiling, vk::FormatFeatureFlags features);
+    vk::Format findDepthFormat(); // NEW: Helper for depth format
 };
 
 } // namespace VulkanEngine 

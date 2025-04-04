@@ -210,6 +210,7 @@ void Engine::initVulkan() {
     createLogicalDevice();
     createSwapChain();
     createImageViews();
+    createDepthResources();
     createRenderPass();
     createDescriptorSetLayout();
     createGraphicsPipeline();
@@ -621,22 +622,38 @@ void Engine::createRenderPass() {
     colorAttachmentRef.attachment = 0;
     colorAttachmentRef.layout = vk::ImageLayout::eColorAttachmentOptimal;
 
+    vk::AttachmentDescription depthAttachment;
+    depthAttachment.format = depthFormat;
+    depthAttachment.samples = vk::SampleCountFlagBits::e1;
+    depthAttachment.loadOp = vk::AttachmentLoadOp::eClear;
+    depthAttachment.storeOp = vk::AttachmentStoreOp::eDontCare;
+    depthAttachment.stencilLoadOp = vk::AttachmentLoadOp::eDontCare;
+    depthAttachment.stencilStoreOp = vk::AttachmentStoreOp::eDontCare;
+    depthAttachment.initialLayout = vk::ImageLayout::eUndefined;
+    depthAttachment.finalLayout = vk::ImageLayout::eDepthStencilAttachmentOptimal;
+
+    vk::AttachmentReference depthAttachmentRef;
+    depthAttachmentRef.attachment = 1;
+    depthAttachmentRef.layout = vk::ImageLayout::eDepthStencilAttachmentOptimal;
+
     vk::SubpassDescription subpass;
     subpass.pipelineBindPoint = vk::PipelineBindPoint::eGraphics;
     subpass.colorAttachmentCount = 1;
     subpass.pColorAttachments = &colorAttachmentRef;
+    subpass.pDepthStencilAttachment = &depthAttachmentRef;
 
     vk::SubpassDependency dependency;
     dependency.srcSubpass = VK_SUBPASS_EXTERNAL;
     dependency.dstSubpass = 0;
-    dependency.srcStageMask = vk::PipelineStageFlagBits::eColorAttachmentOutput;
-    dependency.srcAccessMask = vk::AccessFlagBits::eNone; // Use eNone if no prior access
-    dependency.dstStageMask = vk::PipelineStageFlagBits::eColorAttachmentOutput;
-    dependency.dstAccessMask = vk::AccessFlagBits::eColorAttachmentWrite;
+    dependency.srcStageMask = vk::PipelineStageFlagBits::eColorAttachmentOutput | vk::PipelineStageFlagBits::eEarlyFragmentTests;
+    dependency.srcAccessMask = vk::AccessFlagBits::eNone;
+    dependency.dstStageMask = vk::PipelineStageFlagBits::eColorAttachmentOutput | vk::PipelineStageFlagBits::eEarlyFragmentTests;
+    dependency.dstAccessMask = vk::AccessFlagBits::eColorAttachmentWrite | vk::AccessFlagBits::eDepthStencilAttachmentWrite;
 
+    std::array<vk::AttachmentDescription, 2> attachments = {colorAttachment, depthAttachment};
     vk::RenderPassCreateInfo renderPassInfo;
-    renderPassInfo.attachmentCount = 1;
-    renderPassInfo.pAttachments = &colorAttachment;
+    renderPassInfo.attachmentCount = static_cast<uint32_t>(attachments.size());
+    renderPassInfo.pAttachments = attachments.data();
     renderPassInfo.subpassCount = 1;
     renderPassInfo.pSubpasses = &subpass;
     renderPassInfo.dependencyCount = 1;
@@ -715,6 +732,13 @@ void Engine::createGraphicsPipeline() {
         {}, VK_FALSE, vk::LogicOp::eCopy, 1, &colorBlendAttachment
     );
 
+    vk::PipelineDepthStencilStateCreateInfo depthStencil;
+    depthStencil.depthTestEnable = VK_TRUE;
+    depthStencil.depthWriteEnable = VK_TRUE;
+    depthStencil.depthCompareOp = vk::CompareOp::eLess;
+    depthStencil.depthBoundsTestEnable = VK_FALSE;
+    depthStencil.stencilTestEnable = VK_FALSE;
+
     vk::PipelineLayoutCreateInfo pipelineLayoutInfo({}, 1, &descriptorSetLayout);
     pipelineLayout = device.createPipelineLayout(pipelineLayoutInfo);
 
@@ -727,7 +751,7 @@ void Engine::createGraphicsPipeline() {
         &viewportState, // Viewport/Scissor set dynamically
         &rasterizer,
         &multisampling,
-        nullptr, // pDepthStencilState
+        &depthStencil,
         &colorBlending,
         &dynamicStateInfo, // Dynamic States
         pipelineLayout,
@@ -749,9 +773,19 @@ void Engine::createGraphicsPipeline() {
 void Engine::createFramebuffers() {
     swapChainFramebuffers.resize(swapChainImageViews.size());
     for (size_t i = 0; i < swapChainImageViews.size(); i++) {
-        vk::ImageView attachments[] = { swapChainImageViews[i] };
+        std::array<vk::ImageView, 2> attachments = {
+            swapChainImageViews[i],
+            depthImageView
+        };
+
         vk::FramebufferCreateInfo framebufferInfo(
-            {}, renderPass, 1, attachments, swapChainExtent.width, swapChainExtent.height, 1
+            {}, // flags
+            renderPass,
+            static_cast<uint32_t>(attachments.size()), // attachmentCount = 2
+            attachments.data(), // pAttachments
+            swapChainExtent.width,
+            swapChainExtent.height,
+            1 // layers
         );
         swapChainFramebuffers[i] = device.createFramebuffer(framebufferInfo);
     }
@@ -1000,14 +1034,16 @@ void Engine::recordCommandBuffer(vk::CommandBuffer commandBuffer, uint32_t image
     vk::CommandBufferBeginInfo beginInfo{};
     commandBuffer.begin(beginInfo);
 
-    // Be explicit with ClearColorValue construction
-    vk::ClearColorValue clearColorValue(std::array<float, 4>{0.0f, 0.0f, 0.0f, 1.0f});
-    vk::ClearValue clearValue(clearColorValue);
+    // Define clear values for BOTH color and depth
+    std::array<vk::ClearValue, 2> clearValues;
+    clearValues[0].color = vk::ClearColorValue{std::array<float, 4>{0.0f, 0.0f, 0.0f, 1.0f}};
+    clearValues[1].depthStencil = vk::ClearDepthStencilValue{1.0f, 0}; // Clear depth to 1.0 (far plane)
 
     vk::RenderPassBeginInfo renderPassInfo(
         renderPass, swapChainFramebuffers[imageIndex],
         vk::Rect2D({0, 0}, swapChainExtent),
-        clearValue // Pass the explicitly constructed ClearValue
+        static_cast<uint32_t>(clearValues.size()), // clearValueCount = 2
+        clearValues.data() // pClearValues
     );
 
     commandBuffer.beginRenderPass(renderPassInfo, vk::SubpassContents::eInline);
@@ -1031,6 +1067,11 @@ void Engine::recordCommandBuffer(vk::CommandBuffer commandBuffer, uint32_t image
 }
 
 void Engine::cleanupSwapChain() {
+    // Destroy depth resources that depend on swap chain size
+    device.destroyImageView(depthImageView);
+    device.destroyImage(depthImage);
+    device.freeMemory(depthImageMemory);
+
     for (auto framebuffer : swapChainFramebuffers) {
         device.destroyFramebuffer(framebuffer);
     }
@@ -1101,12 +1142,90 @@ void Engine::recreateSwapChain() {
     device.waitIdle();
     cleanupSwapChain();
 
-    // Recreate swap chain and related resources
     createSwapChain();
     createImageViews();
-    createRenderPass(); // Render pass might depend on format
-    createGraphicsPipeline(); // Pipeline depends on extent and renderpass
+    createDepthResources();
+    createRenderPass();
+    createGraphicsPipeline();
     createFramebuffers();
+}
+
+// --- NEW Depth Format Helper Implementations ---
+
+vk::Format Engine::findSupportedFormat(
+    const std::vector<vk::Format>& candidates,
+    vk::ImageTiling tiling,
+    vk::FormatFeatureFlags features)
+{
+    for (vk::Format format : candidates) {
+        vk::FormatProperties props = physicalDevice.getFormatProperties(format);
+
+        if (tiling == vk::ImageTiling::eLinear && (props.linearTilingFeatures & features) == features) {
+            return format;
+        } else if (tiling == vk::ImageTiling::eOptimal && (props.optimalTilingFeatures & features) == features) {
+            return format;
+        }
+    }
+
+    throw std::runtime_error("failed to find supported format!");
+}
+
+vk::Format Engine::findDepthFormat() {
+    return findSupportedFormat(
+        {vk::Format::eD32Sfloat, vk::Format::eD32SfloatS8Uint, vk::Format::eD24UnormS8Uint},
+        vk::ImageTiling::eOptimal,
+        vk::FormatFeatureFlagBits::eDepthStencilAttachment
+    );
+}
+
+void Engine::createDepthResources() {
+    depthFormat = findDepthFormat();
+
+    vk::ImageCreateInfo imageInfo(
+        {}, // flags
+        vk::ImageType::e2D,
+        depthFormat,
+        vk::Extent3D{swapChainExtent.width, swapChainExtent.height, 1},
+        1, // mipLevels
+        1, // arrayLayers
+        vk::SampleCountFlagBits::e1, // samples (must match render pass)
+        vk::ImageTiling::eOptimal,
+        vk::ImageUsageFlagBits::eDepthStencilAttachment, // usage
+        vk::SharingMode::eExclusive,
+        0, nullptr, // queueFamilyIndices (exclusive)
+        vk::ImageLayout::eUndefined // initialLayout
+    );
+
+    depthImage = device.createImage(imageInfo);
+
+    vk::MemoryRequirements memRequirements = device.getImageMemoryRequirements(depthImage);
+    vk::MemoryAllocateInfo allocInfo(
+        memRequirements.size,
+        findMemoryType(memRequirements.memoryTypeBits, vk::MemoryPropertyFlagBits::eDeviceLocal)
+    );
+
+    depthImageMemory = device.allocateMemory(allocInfo);
+    device.bindImageMemory(depthImage, depthImageMemory, 0);
+
+    vk::ImageViewCreateInfo viewInfo(
+        {}, // flags
+        depthImage,
+        vk::ImageViewType::e2D,
+        depthFormat,
+        {}, // components (default)
+        vk::ImageSubresourceRange{
+            vk::ImageAspectFlagBits::eDepth, // aspectMask
+            0, // baseMipLevel
+            1, // levelCount
+            0, // baseArrayLayer
+            1 // layerCount
+        }
+    );
+
+    depthImageView = device.createImageView(viewInfo);
+
+    // Note: Image layout transition is often handled implicitly by the render pass
+    // or can be done explicitly here using begin/endSingleTimeCommands if needed.
 }
 
 } // namespace VulkanEngine
