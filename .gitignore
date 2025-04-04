@@ -1,0 +1,78 @@
+# Build directories
+build/
+out/
+Debug/
+Release/
+x64/
+x86/
+Win32/
+bin/
+obj/
+
+# Compiled shader files
+*.spv
+
+# CMake generated files
+CMakeFiles/
+CMakeCache.txt
+cmake_install.cmake
+CTestTestfile.cmake
+CMakeScripts/
+CMakeLists.txt.user
+_deps/
+CMakeUserPresets.json
+compile_commands.json
+
+# C++ compiled files
+*.o
+*.obj
+*.exe
+*.ilk
+*.pdb
+*.dll
+*.so
+*.dylib
+*.lib
+*.a
+*.app
+
+# IDE files
+.vs/
+.vscode/
+.idea/
+*.swp
+*.swo
+*.user
+*.suo
+*.sdf
+*.opensdf
+*.vcxproj.user
+*.vcproj.user
+*.vcxproj.filters
+*.vcproj.filters
+*.xcodeproj/
+*.xcworkspace/
+*.sln.docstates
+
+# OS generated files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# Dependencies
+/external/
+/vendor/
+/third_party/
+/ThirdParty/
+
+# Logs and temp files
+*.log
+*.tlog
+log/
+logs/
+temp/
+tmp/ 
