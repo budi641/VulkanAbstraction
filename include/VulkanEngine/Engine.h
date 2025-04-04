@@ -8,6 +8,7 @@
 #include <optional>
 #include <string>
 #include <array> // Added for attribute descriptions
+#include <memory> // For unique_ptr
 
 // Forward declarations for Vulkan handles to avoid including vulkan.h here
 // This improves compile times if vulkan.h is large or changes often.
@@ -53,6 +54,9 @@ typedef enum VkDebugUtilsMessageSeverityFlagBitsEXT VkDebugUtilsMessageSeverityF
 typedef VkFlags VkDebugUtilsMessageTypeFlagsEXT;
 struct VkDebugUtilsMessengerCallbackDataEXT;
 
+// Include Window header
+#include "VulkanEngine/Window.h"
+
 namespace VulkanEngine {
 
 // Structs moved from main.cpp (or potentially becoming classes later)
@@ -87,9 +91,9 @@ struct UniformBufferObject {
     alignas(16) glm::mat4 proj;
 };
 
-
 class Engine {
 public:
+    // Constructor takes window parameters
     Engine(int width = 800, int height = 600, const std::string& title = "Vulkan Engine");
     ~Engine();
 
@@ -100,15 +104,16 @@ public:
     void run();
 
 private:
-    void initWindow();
+    // Removed initWindow(), now handled by Window class
+    // void initWindow();
     void initVulkan();
     void mainLoop();
     void cleanup();
 
-    // Vulkan Core Initialization Steps (will be extracted later)
+    // Vulkan Core Initialization Steps
     void createInstance();
     void setupDebugMessenger();
-    void createSurface();
+    void createSurface(); // Needs VkInstance from Engine
     void pickPhysicalDevice();
     void createLogicalDevice();
     void createSwapChain();
@@ -133,7 +138,7 @@ private:
     void recordCommandBuffer(VkCommandBuffer commandBuffer, uint32_t imageIndex);
     void updateUniformBuffer(uint32_t currentImage);
 
-    // Vulkan Helpers (will be extracted later)
+    // Vulkan Helpers
     bool checkValidationLayerSupport();
     std::vector<const char*> getRequiredExtensions();
     bool isDeviceSuitable(VkPhysicalDevice device);
@@ -142,7 +147,6 @@ private:
     SwapChainSupportDetails querySwapChainSupport(VkPhysicalDevice device);
     VkSurfaceFormatKHR chooseSwapSurfaceFormat(const std::vector<VkSurfaceFormatKHR>& availableFormats);
     VkPresentModeKHR chooseSwapPresentMode(const std::vector<VkPresentModeKHR>& availablePresentModes);
-    VkExtent2D chooseSwapExtent(const VkSurfaceCapabilitiesKHR& capabilities);
     VkShaderModule createShaderModule(const std::vector<char>& code);
     uint32_t findMemoryType(uint32_t typeFilter, VkMemoryPropertyFlags properties);
     void createBuffer(VkDeviceSize size, VkBufferUsageFlags usage, VkMemoryPropertyFlags properties, VkBuffer& buffer, VkDeviceMemory& bufferMemory);
@@ -151,15 +155,17 @@ private:
     VkCommandBuffer beginSingleTimeCommands();
     void endSingleTimeCommands(VkCommandBuffer commandBuffer);
 
-    // Input Handling (will be extracted later)
+    // Input Handling (Still here for now, depends on Window)
     void processInput();
     void updateCameraVectors();
-    static void framebufferResizeCallback(GLFWwindow* window, int width, int height);
+    // Removed framebufferResizeCallback, handled by Window class
+    // static void framebufferResizeCallback(GLFWwindow* window, int width, int height);
+    // Input callbacks remain for now, but need adjustment
     static void keyCallback(GLFWwindow* window, int key, int scancode, int action, int mods);
     static void mouseButtonCallback(GLFWwindow* window, int button, int action, int mods);
     static void cursorPositionCallback(GLFWwindow* window, double xpos, double ypos);
 
-    // Static Helpers (moved outside or into specific classes later)
+    // Static Helpers
     static std::vector<char> readFile(const std::string& filename);
     static VKAPI_ATTR VkBool32 VKAPI_CALL debugCallback(
         VkDebugUtilsMessageSeverityFlagBitsEXT messageSeverity,
@@ -167,13 +173,12 @@ private:
         const VkDebugUtilsMessengerCallbackDataEXT* pCallbackData,
         void* pUserData);
 
-    // --- Member Variables (similar to VulkanApplication) ---
-    int windowWidth;
-    int windowHeight;
-    std::string windowTitle;
-    GLFWwindow* window = nullptr; // Initialize to nullptr
+    // --- Member Variables --- //
+    std::string applicationName; // Added back for instance creation
+    std::unique_ptr<Window> window; // Use unique_ptr for ownership
+    // Removed windowWidth, windowHeight, windowTitle (now in Window), framebufferResized
 
-    // Vulkan Core Objects
+    // Vulkan Core Objects (Keep these)
     VkInstance instance = nullptr;
     VkDebugUtilsMessengerEXT debugMessenger = nullptr;
     VkSurfaceKHR surface = nullptr;
@@ -182,11 +187,11 @@ private:
     VkQueue graphicsQueue = nullptr;
     VkQueue presentQueue = nullptr;
 
-    // Swap Chain
+    // Swap Chain (Keep these)
     VkSwapchainKHR swapChain = nullptr;
     std::vector<VkImage> swapChainImages;
     VkFormat swapChainImageFormat;
-    VkExtent2D swapChainExtent;
+    VkExtent2D swapChainExtent; // Still need this member
     std::vector<VkImageView> swapChainImageViews;
     std::vector<VkFramebuffer> swapChainFramebuffers;
 
@@ -220,14 +225,11 @@ private:
     std::vector<VkFence> inFlightFences;
     uint32_t currentFrame = 0;
 
-    // Application State
-    bool framebufferResized = false;
-
-    // Vertex Data (Hardcoded for now, will be refactored)
+    // Vertex Data (Keep for now)
     const std::vector<Vertex> vertices;
     const std::vector<uint16_t> indices;
 
-    // Camera controls (will be moved to Camera class)
+    // Camera controls (Keep for now)
     glm::vec3 cameraPos = glm::vec3(0.0f, 0.0f, 3.0f);
     glm::vec3 cameraFront = glm::vec3(0.0f, 0.0f, -1.0f);
     glm::vec3 cameraUp = glm::vec3(0.0f, 1.0f, 0.0f);
@@ -242,14 +244,14 @@ private:
     float lastY = 0.0f; // Initialized in initWindow
     float mouseSensitivity = 0.1f;
 
-    // Keyboard state (will be moved to Input class)
+    // Keyboard state (Keep for now)
     bool keys[1024] = {0};
 
-    // Timing (for movement speed independence)
+    // Timing (Keep for now)
     float deltaTime = 0.0f;
     float lastFrameTime = 0.0f;
 
-    // Validation Layers (Configuration)
+    // Validation Layers (Keep)
     const std::vector<const char*> validationLayers = {
         "VK_LAYER_KHRONOS_validation"
     };

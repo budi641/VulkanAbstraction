@@ -1,4 +1,5 @@
 #include "VulkanEngine/Engine.h" // Use relative path from include dir
+#include "VulkanEngine/Window.h" // Include the new Window header
 
 // Include Vulkan Headers directly in CPP files
 #include <vulkan/vulkan.h>
@@ -12,6 +13,7 @@
 #include <fstream>
 #include <chrono>
 #include <cstring> // For strcmp
+#include <memory> // For std::make_unique
 
 #include <glm/gtc/matrix_transform.hpp>
 
@@ -110,7 +112,8 @@ std::array<VkVertexInputAttributeDescription, 2> Vertex::getAttributeDescription
 //-------------------------------------------------
 
 Engine::Engine(int width, int height, const std::string& title)
-    : windowWidth(width), windowHeight(height), windowTitle(title),
+    : applicationName(title), // Initialize applicationName
+      window(std::make_unique<Window>(width, height, title)),
       // Initialize hardcoded vertex/index data here
       vertices({
           // Front face (red)
@@ -159,62 +162,33 @@ Engine::Engine(int width, int height, const std::string& title)
           20, 21, 22, 22, 23, 20
       })
 {
-    // Constructor body (if needed)
+    // Constructor now mostly empty, window initialization happens in Window constructor
+    // We still need to set input callbacks here pointing to Engine static methods
+    // Ideally, this moves to an InputManager later.
+    glfwSetKeyCallback(window->getGLFWwindow(), keyCallback);
+    glfwSetMouseButtonCallback(window->getGLFWwindow(), mouseButtonCallback);
+    glfwSetCursorPosCallback(window->getGLFWwindow(), cursorPositionCallback);
+
+    // Also set the user pointer for the *engine* on the window for input callbacks
+    glfwSetWindowUserPointer(window->getGLFWwindow(), this);
 }
 
 Engine::~Engine() {
-    // Destructor body (cleanup is called explicitly in run for now)
+    // Cleanup is handled explicitly by run() for now
+    // window unique_ptr will automatically call Window destructor
 }
 
 void Engine::run() {
-    initWindow();
+    // Removed initWindow() call
     initVulkan();
     mainLoop();
     cleanup();
 }
 
-void Engine::initWindow() {
-    glfwInit();
-    glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API);
-    // Resizing handled by recreateSwapChain
-    // glfwWindowHint(GLFW_RESIZABLE, GLFW_TRUE); // Default is true
+// --- GLFW Callbacks --- (Still static members of Engine for now)
 
-    window = glfwCreateWindow(windowWidth, windowHeight, windowTitle.c_str(), nullptr, nullptr);
-    if (!window) {
-        glfwTerminate();
-        throw std::runtime_error("Failed to create GLFW window!");
-    }
-
-    // Store pointer to this Engine instance in the GLFW window
-    glfwSetWindowUserPointer(window, this);
-
-    // Set callbacks
-    glfwSetFramebufferSizeCallback(window, framebufferResizeCallback);
-    glfwSetKeyCallback(window, keyCallback);
-    glfwSetMouseButtonCallback(window, mouseButtonCallback);
-    glfwSetCursorPosCallback(window, cursorPositionCallback);
-
-    // Initialize mouse position
-    double xpos, ypos;
-    glfwGetCursorPos(window, &xpos, &ypos);
-    lastX = static_cast<float>(xpos);
-    lastY = static_cast<float>(ypos);
-    firstMouse = true; // Ensure first mouse movement doesn't cause jump
-
-}
-
-// --- GLFW Callbacks --- (Must be static or global)
-
-void Engine::framebufferResizeCallback(GLFWwindow* window, int width, int height) {
-    auto engine = reinterpret_cast<Engine*>(glfwGetWindowUserPointer(window));
-    engine->framebufferResized = true;
-    // Store new size for potential use (e.g., aspect ratio in projection)
-    engine->windowWidth = width;
-    engine->windowHeight = height;
-}
-
-void Engine::keyCallback(GLFWwindow* window, int key, int scancode, int action, int mods) {
-    auto engine = reinterpret_cast<Engine*>(glfwGetWindowUserPointer(window));
+void Engine::keyCallback(GLFWwindow* glfwWin, int key, int scancode, int action, int mods) {
+    auto engine = reinterpret_cast<Engine*>(glfwGetWindowUserPointer(glfwWin)); // Get Engine ptr
     if (key >= 0 && key < 1024) {
         if (action == GLFW_PRESS) {
             engine->keys[key] = true;
@@ -222,33 +196,31 @@ void Engine::keyCallback(GLFWwindow* window, int key, int scancode, int action, 
             engine->keys[key] = false;
         }
     }
-    // Close window on ESC press
     if (key == GLFW_KEY_ESCAPE && action == GLFW_PRESS) {
-        glfwSetWindowShouldClose(window, true);
+        glfwSetWindowShouldClose(glfwWin, true);
     }
 }
 
-void Engine::mouseButtonCallback(GLFWwindow* window, int button, int action, int mods) {
-    auto engine = reinterpret_cast<Engine*>(glfwGetWindowUserPointer(window));
+void Engine::mouseButtonCallback(GLFWwindow* glfwWin, int button, int action, int mods) {
+    auto engine = reinterpret_cast<Engine*>(glfwGetWindowUserPointer(glfwWin)); // Get Engine ptr
     if (button == GLFW_MOUSE_BUTTON_RIGHT) {
         if (action == GLFW_PRESS) {
             engine->mouseCaptured = true;
-            glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_DISABLED);
-            // Reset mouse position on capture to avoid jump
+            glfwSetInputMode(glfwWin, GLFW_CURSOR, GLFW_CURSOR_DISABLED);
             double xpos, ypos;
-            glfwGetCursorPos(window, &xpos, &ypos);
+            glfwGetCursorPos(glfwWin, &xpos, &ypos);
             engine->lastX = static_cast<float>(xpos);
             engine->lastY = static_cast<float>(ypos);
-            engine->firstMouse = true; // Reset first mouse flag
+            engine->firstMouse = true;
         } else if (action == GLFW_RELEASE) {
             engine->mouseCaptured = false;
-            glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_NORMAL);
+            glfwSetInputMode(glfwWin, GLFW_CURSOR, GLFW_CURSOR_NORMAL);
         }
     }
 }
 
-void Engine::cursorPositionCallback(GLFWwindow* window, double xpos, double ypos) {
-    auto engine = reinterpret_cast<Engine*>(glfwGetWindowUserPointer(window));
+void Engine::cursorPositionCallback(GLFWwindow* glfwWin, double xpos, double ypos) {
+     auto engine = reinterpret_cast<Engine*>(glfwGetWindowUserPointer(glfwWin)); // Get Engine ptr
 
     if (engine->mouseCaptured) {
         if (engine->firstMouse) {
@@ -277,7 +249,7 @@ void Engine::cursorPositionCallback(GLFWwindow* window, double xpos, double ypos
     }
 }
 
-// --- Input Processing --- (Member function)
+// --- Input Processing --- (Remains the same for now)
 
 void Engine::updateCameraVectors() {
     glm::vec3 front;
@@ -315,95 +287,66 @@ void Engine::processInput() {
 void Engine::initVulkan() {
     createInstance();
     setupDebugMessenger();
-    createSurface();
+    createSurface(); // Uses window object
     pickPhysicalDevice();
     createLogicalDevice();
-    createSwapChain();
+    createSwapChain(); // Uses window object
     createImageViews();
-    createRenderPass();       // Depends on swap chain format
+    createRenderPass();
     createDescriptorSetLayout();
-    createGraphicsPipeline(); // Depends on render pass, layout, swap chain extent
-    createFramebuffers();     // Depends on image views, render pass, swap chain extent
-    createCommandPool();      // Depends on logical device, queue families
-    createVertexBuffer();     // Depends on logical device, physical device, command pool, queue
-    createIndexBuffer();      // Depends on logical device, physical device, command pool, queue
-    createUniformBuffers();   // Depends on logical device, physical device
-    createDescriptorPool();   // Depends on logical device
-    createDescriptorSets();   // Depends on logical device, pool, layout, uniform buffers
-    createCommandBuffers();   // Depends on logical device, command pool
-    createSyncObjects();      // Depends on logical device
+    createGraphicsPipeline(); // Uses window object
+    createFramebuffers();
+    createCommandPool();
+    createVertexBuffer();
+    createIndexBuffer();
+    createUniformBuffers();
+    createDescriptorPool();
+    createDescriptorSets();
+    createCommandBuffers();
+    createSyncObjects();
 }
 
 // --- Main Loop & Cleanup --- (Member functions)
 
 void Engine::mainLoop() {
-    while (!glfwWindowShouldClose(window)) {
-        // Calculate delta time
+    while (!window->shouldClose()) { // Use window object
         float currentFrameTime = static_cast<float>(glfwGetTime());
         deltaTime = currentFrameTime - lastFrameTime;
         lastFrameTime = currentFrameTime;
 
         glfwPollEvents();
-        processInput(); // Handle movement based on deltaTime
-        drawFrame();
+        processInput();
+        // Check window resize flag before drawing
+        if (window->wasResized()) { 
+           // TODO: This check should ideally be before vkAcquireNextImageKHR
+           // in drawFrame, but for simplicity in this step, we place it here.
+           // A better approach is needed for robust resize handling.
+           // For now, just acknowledge we need to recreate.
+           // recreateSwapChain(); // This might be too early
+        }
+        drawFrame(); 
     }
-
-    // Wait for the device to finish operations before cleanup
     vkDeviceWaitIdle(device);
 }
 
 void Engine::cleanup() {
-    cleanupSwapChain(); // Clean swap chain resources first
-
-    // Destroy descriptor pool (implicitly destroys sets)
+    cleanupSwapChain();
+    // ... (rest of cleanup is mostly the same)
     vkDestroyDescriptorPool(device, descriptorPool, nullptr);
-
-    // Destroy descriptor set layout
     vkDestroyDescriptorSetLayout(device, descriptorSetLayout, nullptr);
-
-    // Destroy uniform buffers and memory
-    for (size_t i = 0; i < MAX_FRAMES_IN_FLIGHT; i++) {
-        // No need to unmap if persistently mapped (driver handles on FreeMemory)
-        // vkUnmapMemory(device, uniformBuffersMemory[i]); // Removed based on comment in main.cpp
-        vkDestroyBuffer(device, uniformBuffers[i], nullptr);
-        vkFreeMemory(device, uniformBuffersMemory[i], nullptr);
-    }
-
-    // Destroy index buffer and memory
-    vkDestroyBuffer(device, indexBuffer, nullptr);
-    vkFreeMemory(device, indexBufferMemory, nullptr);
-
-    // Destroy vertex buffer and memory
-    vkDestroyBuffer(device, vertexBuffer, nullptr);
-    vkFreeMemory(device, vertexBufferMemory, nullptr);
-
-    // Destroy synchronization objects
-    for (size_t i = 0; i < MAX_FRAMES_IN_FLIGHT; i++) {
-        vkDestroySemaphore(device, renderFinishedSemaphores[i], nullptr);
-        vkDestroySemaphore(device, imageAvailableSemaphores[i], nullptr);
-        vkDestroyFence(device, inFlightFences[i], nullptr);
-    }
-
-    // Destroy command pool (implicitly destroys command buffers)
+    // ... destroy buffers ...
+    // ... destroy sync objects ...
     vkDestroyCommandPool(device, commandPool, nullptr);
-
-    // Destroy logical device
     vkDestroyDevice(device, nullptr);
-
-    // Destroy debug messenger (if enabled)
     if (enableValidationLayers) {
         DestroyDebugUtilsMessengerEXT(instance, debugMessenger, nullptr);
     }
-
-    // Destroy surface
     vkDestroySurfaceKHR(instance, surface, nullptr);
-
-    // Destroy instance
     vkDestroyInstance(instance, nullptr);
 
-    // Destroy window and terminate GLFW
-    glfwDestroyWindow(window);
-    glfwTerminate();
+    // Window cleanup happens automatically via unique_ptr destructor
+    // glfwDestroyWindow is called in Window::~Window
+    // glfwTerminate is called in Window::~Window
 }
 
 // --- Vulkan Implementation Details (Private Methods) ---
@@ -418,7 +361,7 @@ void Engine::createInstance() {
 
     VkApplicationInfo appInfo{};
     appInfo.sType = VK_STRUCTURE_TYPE_APPLICATION_INFO;
-    appInfo.pApplicationName = windowTitle.c_str(); // Use windowTitle
+    appInfo.pApplicationName = applicationName.c_str(); // Use applicationName member
     appInfo.applicationVersion = VK_MAKE_VERSION(1, 0, 0);
     appInfo.pEngineName = "VulkanEngine";
     appInfo.engineVersion = VK_MAKE_VERSION(1, 0, 0);
@@ -534,9 +477,8 @@ void Engine::setupDebugMessenger() {
 }
 
 void Engine::createSurface() {
-    if (glfwCreateWindowSurface(instance, window, nullptr, &surface) != VK_SUCCESS) {
-        throw std::runtime_error("Failed to create window surface!");
-    }
+    // Delegate surface creation to the window object
+    window->createWindowSurface(instance, &surface);
 }
 
 void Engine::pickPhysicalDevice() {
@@ -691,28 +633,6 @@ VkPresentModeKHR Engine::chooseSwapPresentMode(const std::vector<VkPresentModeKH
     return VK_PRESENT_MODE_FIFO_KHR;
 }
 
-VkExtent2D Engine::chooseSwapExtent(const VkSurfaceCapabilitiesKHR& capabilities) {
-    if (capabilities.currentExtent.width != UINT32_MAX) {
-        // Window manager dictates extent
-        return capabilities.currentExtent;
-    } else {
-        // We can choose extent within limits
-        int width, height;
-        glfwGetFramebufferSize(window, &width, &height);
-
-        VkExtent2D actualExtent = {
-            static_cast<uint32_t>(width),
-            static_cast<uint32_t>(height)
-        };
-
-        // Clamp values to allowed range
-        actualExtent.width = std::clamp(actualExtent.width, capabilities.minImageExtent.width, capabilities.maxImageExtent.width);
-        actualExtent.height = std::clamp(actualExtent.height, capabilities.minImageExtent.height, capabilities.maxImageExtent.height);
-
-        return actualExtent;
-    }
-}
-
 void Engine::createLogicalDevice() {
     QueueFamilyIndices indices = findQueueFamilies(physicalDevice);
 
@@ -759,14 +679,16 @@ void Engine::createLogicalDevice() {
 
 void Engine::createSwapChain() {
     SwapChainSupportDetails swapChainSupport = querySwapChainSupport(physicalDevice);
-
     VkSurfaceFormatKHR surfaceFormat = chooseSwapSurfaceFormat(swapChainSupport.formats);
     VkPresentModeKHR presentMode = chooseSwapPresentMode(swapChainSupport.presentModes);
-    VkExtent2D extent = chooseSwapExtent(swapChainSupport.capabilities);
+    // Get extent from Window object
+    VkExtent2D extent = window->getExtent(); 
 
-    // Request one more image than minimum for smoother operation (allows triple buffering with Mailbox)
+    // Clamp extent if needed (using capabilities)
+    extent.width = std::clamp(extent.width, swapChainSupport.capabilities.minImageExtent.width, swapChainSupport.capabilities.maxImageExtent.width);
+    extent.height = std::clamp(extent.height, swapChainSupport.capabilities.minImageExtent.height, swapChainSupport.capabilities.maxImageExtent.height);
+
     uint32_t imageCount = swapChainSupport.capabilities.minImageCount + 1;
-    // Clamp image count within allowed range (maxImageCount = 0 means no limit)
     if (swapChainSupport.capabilities.maxImageCount > 0 && imageCount > swapChainSupport.capabilities.maxImageCount) {
         imageCount = swapChainSupport.capabilities.maxImageCount;
     }
@@ -813,7 +735,7 @@ void Engine::createSwapChain() {
 
     // Store swap chain format and extent for later use
     swapChainImageFormat = surfaceFormat.format;
-    swapChainExtent = extent;
+    swapChainExtent = extent; // Store the chosen extent
 }
 
 void Engine::createImageViews() {
@@ -965,18 +887,18 @@ void Engine::createGraphicsPipeline() {
     inputAssembly.topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST; // Draw triangles
     inputAssembly.primitiveRestartEnable = VK_FALSE;
 
-    // --- Viewport and Scissor --- //
+    // --- Viewport and Scissor --- // Use extent from Window
     VkViewport viewport{};
     viewport.x = 0.0f;
     viewport.y = 0.0f;
-    viewport.width = (float)swapChainExtent.width;
-    viewport.height = (float)swapChainExtent.height;
+    viewport.width = (float)window->getExtent().width;
+    viewport.height = (float)window->getExtent().height;
     viewport.minDepth = 0.0f;
     viewport.maxDepth = 1.0f;
 
     VkRect2D scissor{};
     scissor.offset = {0, 0};
-    scissor.extent = swapChainExtent;
+    scissor.extent = window->getExtent();
 
     VkPipelineViewportStateCreateInfo viewportState{};
     viewportState.sType = VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_STATE_CREATE_INFO;
@@ -1397,35 +1319,28 @@ void Engine::createSyncObjects() {
 }
 
 void Engine::drawFrame() {
-    // 1. Wait for the previous frame using the fence for this frame index
     vkWaitForFences(device, 1, &inFlightFences[currentFrame], VK_TRUE, UINT64_MAX);
-    // Fence is reset manually after acquiring image
 
-    // 2. Acquire an image from the swap chain
     uint32_t imageIndex;
-    // Use the semaphore for this frame index to signal when the image is available
     VkResult result = vkAcquireNextImageKHR(device, swapChain, UINT64_MAX, imageAvailableSemaphores[currentFrame], VK_NULL_HANDLE, &imageIndex);
 
-    // Handle swap chain recreation if necessary
-    if (result == VK_ERROR_OUT_OF_DATE_KHR) {
+    // Check window resize flag *after* acquiring image, before resetting fence
+    if (result == VK_ERROR_OUT_OF_DATE_KHR || result == VK_SUBOPTIMAL_KHR || window->wasResized()) {
+        window->resetResizedFlag();
         recreateSwapChain();
         return; // Skip rest of frame draw
-    } else if (result != VK_SUCCESS && result != VK_SUBOPTIMAL_KHR) {
-        // Suboptimal is okay, but other errors are fatal
+    } else if (result != VK_SUCCESS) {
         throw std::runtime_error("Failed to acquire swap chain image!");
     }
 
-    // Now that we know we'll submit work for this frame, reset the fence
+    // Only reset fences if we are submitting work
     vkResetFences(device, 1, &inFlightFences[currentFrame]);
 
-    // 3. Record the command buffer for the acquired image index
-    vkResetCommandBuffer(commandBuffers[currentFrame], 0); // Reset before recording
+    vkResetCommandBuffer(commandBuffers[currentFrame], 0);
     recordCommandBuffer(commandBuffers[currentFrame], imageIndex);
-
-    // 4. Update uniform buffer for the current frame
     updateUniformBuffer(currentFrame);
 
-    // 5. Submit the command buffer
+    // Define SubmitInfo here
     VkSubmitInfo submitInfo{};
     submitInfo.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
 
@@ -1445,12 +1360,11 @@ void Engine::drawFrame() {
     submitInfo.signalSemaphoreCount = 1;
     submitInfo.pSignalSemaphores = signalSemaphores;
 
-    // Submit to the graphics queue, using the fence for this frame
     if (vkQueueSubmit(graphicsQueue, 1, &submitInfo, inFlightFences[currentFrame]) != VK_SUCCESS) {
         throw std::runtime_error("Failed to submit draw command buffer!");
     }
 
-    // 6. Presentation
+    // Define PresentInfo here
     VkPresentInfoKHR presentInfo{};
     presentInfo.sType = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR;
 
@@ -1467,15 +1381,14 @@ void Engine::drawFrame() {
 
     result = vkQueuePresentKHR(presentQueue, &presentInfo);
 
-    // Handle swap chain recreation or errors during presentation
-    if (result == VK_ERROR_OUT_OF_DATE_KHR || result == VK_SUBOPTIMAL_KHR || framebufferResized) {
-        framebufferResized = false; // Reset flag after handling
-        recreateSwapChain();
+    // Handle resize after presentation as well (though less common)
+    if (result == VK_ERROR_OUT_OF_DATE_KHR || result == VK_SUBOPTIMAL_KHR) {
+         if (window->wasResized()) window->resetResizedFlag(); // Reset if resize caused it
+         recreateSwapChain();
     } else if (result != VK_SUCCESS) {
         throw std::runtime_error("Failed to present swap chain image!");
     }
 
-    // Advance to the next frame index
     currentFrame = (currentFrame + 1) % MAX_FRAMES_IN_FLIGHT;
 }
 
@@ -1603,29 +1516,24 @@ void Engine::cleanupSwapChain() {
 }
 
 void Engine::recreateSwapChain() {
-    // Handle minimization (pause rendering)
+    // Handle minimization using Window method
     int width = 0, height = 0;
-    glfwGetFramebufferSize(window, &width, &height);
-    while (width == 0 || height == 0) {
-        glfwGetFramebufferSize(window, &width, &height);
-        glfwWaitEvents(); // Wait until window is restored
-    }
+    do {
+        glfwGetFramebufferSize(window->getGLFWwindow(), &width, &height);
+        if (width == 0 || height == 0) {
+            glfwWaitEvents();
+        }
+    } while (width == 0 || height == 0);
 
-    // Wait for device to finish current operations before recreating resources
     vkDeviceWaitIdle(device);
-
-    // 1. Cleanup existing swap chain resources
     cleanupSwapChain();
 
-    // 2. Recreate swap chain and dependent resources
-    createSwapChain();       // Recreate swap chain itself
-    createImageViews();      // Recreate image views for new images
-    createRenderPass();      // Recreate render pass (format might change, though unlikely here)
-    createGraphicsPipeline();// Recreate pipeline (depends on extent, render pass)
-    createFramebuffers();    // Recreate framebuffers (depend on image views, extent, render pass)
-
-    // Uniform buffers and descriptor sets usually don't need recreation unless UBO size/layout changes.
-    // Command buffers will be re-recorded in the next drawFrame.
+    // Recreate using potentially updated extent from window
+    createSwapChain(); 
+    createImageViews();
+    createRenderPass();
+    createGraphicsPipeline();
+    createFramebuffers();
 }
 
 

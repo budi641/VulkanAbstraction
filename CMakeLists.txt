@@ -18,6 +18,7 @@ file(GLOB_RECURSE SOURCES
     "src/*.cpp"
     "src/*.h"
     "src/VulkanEngine/*.cpp"
+    "src/VulkanEngine/Window.cpp"
 )
 
 # Create the executable
