@@ -2,7 +2,7 @@
 
 #define GLFW_INCLUDE_VULKAN
 #include <GLFW/glfw3.h>
-#include <glm/glm.hpp>
+#include <vulkan/vulkan.hpp>
 
 #include <vector>
 #include <optional>
@@ -56,6 +56,8 @@ struct VkDebugUtilsMessengerCallbackDataEXT;
 
 // Include Window header
 #include "VulkanEngine/Window.h"
+#include "VulkanEngine/Camera.h" // Include Camera
+#include "VulkanEngine/InputManager.h" // Include InputManager
 
 namespace VulkanEngine {
 
@@ -70,9 +72,9 @@ struct QueueFamilyIndices {
 };
 
 struct SwapChainSupportDetails {
-    VkSurfaceCapabilitiesKHR capabilities;
-    std::vector<VkSurfaceFormatKHR> formats;
-    std::vector<VkPresentModeKHR> presentModes;
+    vk::SurfaceCapabilitiesKHR capabilities;
+    std::vector<vk::SurfaceFormatKHR> formats;
+    std::vector<vk::PresentModeKHR> presentModes;
 };
 
 struct Vertex {
@@ -81,14 +83,33 @@ struct Vertex {
     // texCoord will be added later if needed
     // glm::vec2 texCoord;
 
-    static VkVertexInputBindingDescription getBindingDescription();
-    static std::array<VkVertexInputAttributeDescription, 2> getAttributeDescriptions();
+    static vk::VertexInputBindingDescription getBindingDescription() {
+        vk::VertexInputBindingDescription bindingDescription{};
+        bindingDescription.binding = 0;
+        bindingDescription.stride = sizeof(Vertex);
+        bindingDescription.inputRate = vk::VertexInputRate::eVertex;
+        return bindingDescription;
+    }
+
+    static std::array<vk::VertexInputAttributeDescription, 2> getAttributeDescriptions() {
+        std::array<vk::VertexInputAttributeDescription, 2> attributeDescriptions{};
+        attributeDescriptions[0].binding = 0;
+        attributeDescriptions[0].location = 0;
+        attributeDescriptions[0].format = vk::Format::eR32G32B32Sfloat;
+        attributeDescriptions[0].offset = offsetof(Vertex, pos);
+
+        attributeDescriptions[1].binding = 0;
+        attributeDescriptions[1].location = 1;
+        attributeDescriptions[1].format = vk::Format::eR32G32B32Sfloat;
+        attributeDescriptions[1].offset = offsetof(Vertex, color);
+        return attributeDescriptions;
+    }
 };
 
 struct UniformBufferObject {
-    alignas(16) glm::mat4 model;
-    alignas(16) glm::mat4 view;
-    alignas(16) glm::mat4 proj;
+    glm::mat4 model;
+    glm::mat4 view;
+    glm::mat4 proj;
 };
 
 class Engine {
@@ -102,6 +123,14 @@ public:
     Engine& operator=(const Engine&) = delete;
 
     void run();
+
+    Camera& getCamera() { return camera; } // Add getter for Camera
+    const Camera& getCamera() const { return camera; }
+
+    // Expose necessary getters if needed by InputManager callbacks (e.g., camera)
+    // This might require passing 'this' (Engine*) to InputManager setup
+    InputManager& getInputManager() { return *inputManager; } // Might need this
+    Window& getWindow() { return *window; } // Might need this
 
 private:
     // Removed initWindow(), now handled by Window class
@@ -135,28 +164,29 @@ private:
     void drawFrame();
     void recreateSwapChain();
     void cleanupSwapChain();
-    void recordCommandBuffer(VkCommandBuffer commandBuffer, uint32_t imageIndex);
+    void recordCommandBuffer(vk::CommandBuffer commandBuffer, uint32_t imageIndex);
     void updateUniformBuffer(uint32_t currentImage);
 
     // Vulkan Helpers
     bool checkValidationLayerSupport();
     std::vector<const char*> getRequiredExtensions();
-    bool isDeviceSuitable(VkPhysicalDevice device);
-    bool checkDeviceExtensionSupport(VkPhysicalDevice device);
-    QueueFamilyIndices findQueueFamilies(VkPhysicalDevice device);
-    SwapChainSupportDetails querySwapChainSupport(VkPhysicalDevice device);
-    VkSurfaceFormatKHR chooseSwapSurfaceFormat(const std::vector<VkSurfaceFormatKHR>& availableFormats);
-    VkPresentModeKHR chooseSwapPresentMode(const std::vector<VkPresentModeKHR>& availablePresentModes);
-    VkShaderModule createShaderModule(const std::vector<char>& code);
-    uint32_t findMemoryType(uint32_t typeFilter, VkMemoryPropertyFlags properties);
-    void createBuffer(VkDeviceSize size, VkBufferUsageFlags usage, VkMemoryPropertyFlags properties, VkBuffer& buffer, VkDeviceMemory& bufferMemory);
-    void copyBuffer(VkBuffer srcBuffer, VkBuffer dstBuffer, VkDeviceSize size);
+    bool isDeviceSuitable(vk::PhysicalDevice device);
+    bool checkDeviceExtensionSupport(vk::PhysicalDevice device);
+    QueueFamilyIndices findQueueFamilies(vk::PhysicalDevice device);
+    SwapChainSupportDetails querySwapChainSupport(vk::PhysicalDevice device);
+    vk::SurfaceFormatKHR chooseSwapSurfaceFormat(const std::vector<vk::SurfaceFormatKHR>& availableFormats);
+    vk::PresentModeKHR chooseSwapPresentMode(const std::vector<vk::PresentModeKHR>& availablePresentModes);
+    vk::Extent2D chooseSwapExtent(const vk::SurfaceCapabilitiesKHR& capabilities);
+    vk::ShaderModule createShaderModule(const std::vector<char>& code);
+    uint32_t findMemoryType(uint32_t typeFilter, vk::MemoryPropertyFlags properties);
+    void createBuffer(vk::DeviceSize size, vk::BufferUsageFlags usage, vk::MemoryPropertyFlags properties, vk::Buffer& buffer, vk::DeviceMemory& bufferMemory);
+    void copyBuffer(vk::Buffer srcBuffer, vk::Buffer dstBuffer, vk::DeviceSize size);
     // Command buffer helpers (potential extraction)
-    VkCommandBuffer beginSingleTimeCommands();
-    void endSingleTimeCommands(VkCommandBuffer commandBuffer);
+    vk::CommandBuffer beginSingleTimeCommands();
+    void endSingleTimeCommands(vk::CommandBuffer commandBuffer);
 
     // Input Handling (Still here for now, depends on Window)
-    void processInput();
+    void processInput(float deltaTime); // New method for input handling
     void updateCameraVectors();
     // Removed framebufferResizeCallback, handled by Window class
     // static void framebufferResizeCallback(GLFWwindow* window, int width, int height);
@@ -166,7 +196,7 @@ private:
     static void cursorPositionCallback(GLFWwindow* window, double xpos, double ypos);
 
     // Static Helpers
-    static std::vector<char> readFile(const std::string& filename);
+    std::vector<char> readFile(const std::string& filename);
     static VKAPI_ATTR VkBool32 VKAPI_CALL debugCallback(
         VkDebugUtilsMessageSeverityFlagBitsEXT messageSeverity,
         VkDebugUtilsMessageTypeFlagsEXT messageType,
@@ -179,51 +209,53 @@ private:
     // Removed windowWidth, windowHeight, windowTitle (now in Window), framebufferResized
 
     // Vulkan Core Objects (Keep these)
-    VkInstance instance = nullptr;
-    VkDebugUtilsMessengerEXT debugMessenger = nullptr;
-    VkSurfaceKHR surface = nullptr;
-    VkPhysicalDevice physicalDevice = VK_NULL_HANDLE;
-    VkDevice device = nullptr;
-    VkQueue graphicsQueue = nullptr;
-    VkQueue presentQueue = nullptr;
+    vk::Instance instance = nullptr;
+    vk::DebugUtilsMessengerEXT debugMessenger = nullptr;
+    vk::SurfaceKHR surface = nullptr;
+    vk::PhysicalDevice physicalDevice = nullptr;
+    vk::Device device = nullptr;
+    vk::Queue graphicsQueue = nullptr;
+    vk::Queue presentQueue = nullptr;
 
     // Swap Chain (Keep these)
-    VkSwapchainKHR swapChain = nullptr;
-    std::vector<VkImage> swapChainImages;
-    VkFormat swapChainImageFormat;
-    VkExtent2D swapChainExtent; // Still need this member
-    std::vector<VkImageView> swapChainImageViews;
-    std::vector<VkFramebuffer> swapChainFramebuffers;
+    vk::SwapchainKHR swapChain = nullptr;
+    std::vector<vk::Image> swapChainImages;
+    vk::Format swapChainImageFormat;
+    vk::Extent2D swapChainExtent; // Still need this member
+    std::vector<vk::ImageView> swapChainImageViews;
+    std::vector<vk::Framebuffer> swapChainFramebuffers;
 
     // Pipeline & Rendering
-    VkRenderPass renderPass = nullptr;
-    VkDescriptorSetLayout descriptorSetLayout = nullptr;
-    VkPipelineLayout pipelineLayout = nullptr;
-    VkPipeline graphicsPipeline = nullptr;
-    VkCommandPool commandPool = nullptr;
+    vk::RenderPass renderPass = nullptr;
+    vk::DescriptorSetLayout descriptorSetLayout = nullptr;
+    vk::PipelineLayout pipelineLayout = nullptr;
+    vk::Pipeline graphicsPipeline = nullptr;
+    vk::CommandPool commandPool = nullptr;
 
     // Buffers & Memory
-    VkBuffer vertexBuffer = nullptr;
-    VkDeviceMemory vertexBufferMemory = nullptr;
-    VkBuffer indexBuffer = nullptr;
-    VkDeviceMemory indexBufferMemory = nullptr;
-    std::vector<VkBuffer> uniformBuffers;
-    std::vector<VkDeviceMemory> uniformBuffersMemory;
+    vk::Buffer vertexBuffer = nullptr;
+    vk::DeviceMemory vertexBufferMemory = nullptr;
+    vk::Buffer indexBuffer = nullptr;
+    vk::DeviceMemory indexBufferMemory = nullptr;
+    std::vector<vk::Buffer> uniformBuffers;
+    std::vector<vk::DeviceMemory> uniformBuffersMemory;
     std::vector<void*> uniformBuffersMapped; // For UBO updates
 
     // Descriptors
-    VkDescriptorPool descriptorPool = nullptr;
-    std::vector<VkDescriptorSet> descriptorSets;
+    vk::DescriptorPool descriptorPool = nullptr;
+    std::vector<vk::DescriptorSet> descriptorSets;
 
     // Command Buffers (one per frame in flight)
-    std::vector<VkCommandBuffer> commandBuffers;
+    std::vector<vk::CommandBuffer> commandBuffers;
 
     // Synchronization
     static constexpr int MAX_FRAMES_IN_FLIGHT = 2; // Moved here
-    std::vector<VkSemaphore> imageAvailableSemaphores;
-    std::vector<VkSemaphore> renderFinishedSemaphores;
-    std::vector<VkFence> inFlightFences;
+    std::vector<vk::Semaphore> imageAvailableSemaphores;
+    std::vector<vk::Semaphore> renderFinishedSemaphores;
+    std::vector<vk::Fence> inFlightFences;
     uint32_t currentFrame = 0;
+
+    bool framebufferResized = false; // Add this back!
 
     // Vertex Data (Keep for now)
     const std::vector<Vertex> vertices;
@@ -264,6 +296,25 @@ private:
     #else
         const bool enableValidationLayers = true;
     #endif
+
+    // --- Removed Input Members ---
+    // static std::array<bool, 1024> keys;
+    // static std::array<bool, 8> mouseButtons;
+    // static double lastX;
+    // static double lastY;
+    // static bool firstMouse;
+    // static bool mouseCaptured;
+    // static Camera* staticCameraPtr; // Removed static camera pointer
+
+    // --- Removed Static Callbacks ---
+    // static void keyCallback(GLFWwindow* window, int key, int scancode, int action, int mods);
+    // static void mouseButtonCallback(GLFWwindow* window, int button, int action, int mods);
+    // static void cursorPositionCallback(GLFWwindow* window, double xpos, double ypos);
+    // static void framebufferResizeCallback(GLFWwindow* window, int width, int height);
+
+    // --- Members ---
+    std::unique_ptr<InputManager> inputManager; // Input Manager instance
+    Camera camera; // Camera instance
 };
 
 } // namespace VulkanEngine 

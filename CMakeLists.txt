@@ -1,15 +1,22 @@
 cmake_minimum_required(VERSION 3.10)
-project(VulkanAbstraction VERSION 1.0)
+project(VulkanAbstraction VERSION 1.0 LANGUAGES CXX)
 
 # C++ standard
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
+set(CMAKE_CXX_EXTENSIONS OFF)
+
+# Set output directories
+set(CMAKE_ARCHIVE_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/lib)
+set(CMAKE_LIBRARY_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/lib)
+set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin)
 
 # Find Vulkan SDK for shader compiler
-find_package(Vulkan REQUIRED)
-if(NOT TARGET Vulkan::glslc)
-    message(FATAL_ERROR "Could not find Vulkan shader compiler (glslc). Make sure the Vulkan SDK is installed and VULKAN_SDK environment variable is set.")
+find_package(Vulkan REQUIRED COMPONENTS glslc glslangValidator)
+if(NOT Vulkan_FOUND)
+    message(FATAL_ERROR "Vulkan SDK not found.")
 else()
+    message(STATUS "Found Vulkan: ${Vulkan_LIBRARIES} (found version \"${Vulkan_VERSION}\") found components: glslc glslangValidator")
     message(STATUS "Found Vulkan shader compiler (glslc): ${Vulkan_GLSLC_EXECUTABLE}")
 endif()
 
@@ -19,6 +26,8 @@ file(GLOB_RECURSE SOURCES
     "src/*.h"
     "src/VulkanEngine/*.cpp"
     "src/VulkanEngine/Window.cpp"
+    "src/VulkanEngine/InputManager.cpp"
+    "src/VulkanEngine/Camera.cpp"
 )
 
 # Create the executable

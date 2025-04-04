@@ -1,10 +1,12 @@
+#include <vulkan/vulkan.hpp> // Include C++ wrappers
 #include "VulkanEngine/Window.h"
 #include <stdexcept>
+#include <utility> // For std::move
 
 namespace VulkanEngine {
 
-Window::Window(int w, int h, std::string title)
-    : width(w), height(h), windowTitle(std::move(title))
+Window::Window(int w, int h, const std::string& title)
+    : width(w), height(h), windowTitle(title)
 {
     initWindow();
 }
@@ -36,18 +38,40 @@ void Window::initWindow() {
     // or create a dedicated InputManager.
 }
 
-void Window::createWindowSurface(VkInstance instance, VkSurfaceKHR* surface) {
-    if (glfwCreateWindowSurface(instance, window, nullptr, surface) != VK_SUCCESS) {
+void Window::createWindowSurface(vk::Instance instance, VkSurfaceKHR* surface) {
+    if (glfwCreateWindowSurface(static_cast<VkInstance>(instance), window, nullptr, surface) != VK_SUCCESS) {
         throw std::runtime_error("Failed to create window surface!");
     }
 }
 
 // Static callback implementation
 void Window::framebufferResizeCallback(GLFWwindow* glfwWin, int w, int h) {
-    auto windowInstance = reinterpret_cast<Window*>(glfwGetWindowUserPointer(glfwWin));
-    windowInstance->framebufferResized = true;
-    windowInstance->width = w;
-    windowInstance->height = h;
+    // Get the Window instance via the user pointer
+    auto* thisWindow = static_cast<Window*>(glfwGetWindowUserPointer(glfwWin));
+    if (thisWindow) {
+        // Access members through the obtained pointer
+        thisWindow->framebufferResized = true;
+        thisWindow->width = w;
+        thisWindow->height = h;
+    }
+}
+
+vk::Extent2D Window::getExtent() const {
+    int currentWidth, currentHeight;
+    glfwGetFramebufferSize(window, &currentWidth, &currentHeight);
+    return vk::Extent2D{
+        static_cast<uint32_t>(currentWidth),
+        static_cast<uint32_t>(currentHeight)
+    };
+}
+
+float Window::getAspectRatio() const {
+    vk::Extent2D extent = getExtent();
+    // Prevent division by zero if window minimized
+    if (extent.height == 0) {
+        return 1.0f; // Or some default aspect ratio
+    }
+    return static_cast<float>(extent.width) / static_cast<float>(extent.height);
 }
 
 } // namespace VulkanEngine 
