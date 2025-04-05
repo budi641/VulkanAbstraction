@@ -58,19 +58,11 @@ struct VkDebugUtilsMessengerCallbackDataEXT;
 #include "VulkanEngine/Window.h"
 #include "VulkanEngine/Camera.h" // Include Camera
 #include "VulkanEngine/InputManager.h" // Include InputManager
+#include "VulkanEngine/VulkanDevice.h" // Include VulkanDevice
 
 namespace VulkanEngine {
 
 // Structs moved from main.cpp (or potentially becoming classes later)
-struct QueueFamilyIndices {
-    std::optional<uint32_t> graphicsFamily;
-    std::optional<uint32_t> presentFamily;
-
-    bool isComplete() const { // Make const
-        return graphicsFamily.has_value() && presentFamily.has_value();
-    }
-};
-
 struct SwapChainSupportDetails {
     vk::SurfaceCapabilitiesKHR capabilities;
     std::vector<vk::SurfaceFormatKHR> formats;
@@ -129,8 +121,8 @@ public:
 
     // Expose necessary getters if needed by InputManager callbacks (e.g., camera)
     // This might require passing 'this' (Engine*) to InputManager setup
-    InputManager& getInputManager() { return *inputManager; } // Might need this
-    Window& getWindow() { return *window; } // Might need this
+    InputManager& getInputManager() { return *inputManager_; } // Might need this
+    Window& getWindow() { return *window_; } // Might need this
 
 private:
     // Removed initWindow(), now handled by Window class
@@ -139,12 +131,12 @@ private:
     void mainLoop();
     void cleanup();
 
-    // Vulkan Core Initialization Steps
-    void createInstance();
-    void setupDebugMessenger();
-    void createSurface(); // Needs VkInstance from Engine
-    void pickPhysicalDevice();
-    void createLogicalDevice();
+    // Vulkan Core Initialization Steps (Removed redundant ones)
+    // void createInstance();
+    // void setupDebugMessenger();
+    // void createSurface(); // Needs VkInstance from Engine
+    // void pickPhysicalDevice();
+    // void createLogicalDevice();
     void createSwapChain();
     void createImageViews();
     void createRenderPass();
@@ -168,13 +160,13 @@ private:
     void recordCommandBuffer(vk::CommandBuffer commandBuffer, uint32_t imageIndex);
     void updateUniformBuffer(uint32_t currentImage);
 
-    // Vulkan Helpers
-    bool checkValidationLayerSupport();
-    std::vector<const char*> getRequiredExtensions();
-    bool isDeviceSuitable(vk::PhysicalDevice device);
-    bool checkDeviceExtensionSupport(vk::PhysicalDevice device);
-    QueueFamilyIndices findQueueFamilies(vk::PhysicalDevice device);
-    SwapChainSupportDetails querySwapChainSupport(vk::PhysicalDevice device);
+    // Vulkan Helpers (Removed redundant ones)
+    // bool checkValidationLayerSupport();
+    // std::vector<const char*> getRequiredExtensions();
+    // bool isDeviceSuitable(vk::PhysicalDevice device);
+    // bool checkDeviceExtensionSupport(vk::PhysicalDevice device);
+    // QueueFamilyIndices findQueueFamilies(vk::PhysicalDevice device);
+    SwapChainSupportDetails querySwapChainSupport(vk::PhysicalDevice device); // Keep this for now
     vk::SurfaceFormatKHR chooseSwapSurfaceFormat(const std::vector<vk::SurfaceFormatKHR>& availableFormats);
     vk::PresentModeKHR chooseSwapPresentMode(const std::vector<vk::PresentModeKHR>& availablePresentModes);
     vk::Extent2D chooseSwapExtent(const vk::SurfaceCapabilitiesKHR& capabilities);
@@ -185,10 +177,11 @@ private:
     // Command buffer helpers (potential extraction)
     vk::CommandBuffer beginSingleTimeCommands();
     void endSingleTimeCommands(vk::CommandBuffer commandBuffer);
+    // Removed: findSupportedFormat, findDepthFormat
 
     // Input Handling (Still here for now, depends on Window)
     void processInput(float deltaTime); // New method for input handling
-    void updateCameraVectors();
+    void updateCameraVectors(); // Keep for now
     // Removed framebufferResizeCallback, handled by Window class
     // static void framebufferResizeCallback(GLFWwindow* window, int width, int height);
     // Input callbacks remain for now, but need adjustment
@@ -198,25 +191,24 @@ private:
 
     // Static Helpers
     std::vector<char> readFile(const std::string& filename);
-    static VKAPI_ATTR VkBool32 VKAPI_CALL debugCallback(
-        VkDebugUtilsMessageSeverityFlagBitsEXT messageSeverity,
-        VkDebugUtilsMessageTypeFlagsEXT messageType,
-        const VkDebugUtilsMessengerCallbackDataEXT* pCallbackData,
-        void* pUserData);
+    // Removed static debugCallback declaration
+    // static VKAPI_ATTR VkBool32 VKAPI_CALL debugCallback(...);
 
     // --- Member Variables --- //
-    std::string applicationName; // Added back for instance creation
-    std::unique_ptr<Window> window; // Use unique_ptr for ownership
-    // Removed windowWidth, windowHeight, windowTitle (now in Window), framebufferResized
+    // Removed applicationName
+    std::unique_ptr<Window> window_; // Use unique_ptr for ownership, ensure underscore suffix
+    std::unique_ptr<InputManager> inputManager_; // Ensure underscore suffix
+    Camera camera; // Camera instance
+    std::unique_ptr<VulkanDevice> vulkanDevice_; // Add VulkanDevice member
 
-    // Vulkan Core Objects (Keep these)
-    vk::Instance instance = nullptr;
-    vk::DebugUtilsMessengerEXT debugMessenger = nullptr;
-    vk::SurfaceKHR surface = nullptr;
-    vk::PhysicalDevice physicalDevice = nullptr;
-    vk::Device device = nullptr;
-    vk::Queue graphicsQueue = nullptr;
-    vk::Queue presentQueue = nullptr;
+    // Vulkan Core Objects (Removed members handled by VulkanDevice)
+    // vk::Instance instance = nullptr;
+    // vk::DebugUtilsMessengerEXT debugMessenger = nullptr;
+    // vk::SurfaceKHR surface = nullptr;
+    // vk::PhysicalDevice physicalDevice = nullptr;
+    // vk::Device device = nullptr;
+    // vk::Queue graphicsQueue = nullptr;
+    // vk::Queue presentQueue = nullptr;
 
     // Swap Chain (Keep these)
     vk::SwapchainKHR swapChain = nullptr;
@@ -226,20 +218,20 @@ private:
     std::vector<vk::ImageView> swapChainImageViews;
     std::vector<vk::Framebuffer> swapChainFramebuffers;
 
-    // Depth Buffer Resources (NEW)
+    // Depth Buffer Resources (Keep)
     vk::Image depthImage = nullptr;
     vk::DeviceMemory depthImageMemory = nullptr;
     vk::ImageView depthImageView = nullptr;
-    vk::Format depthFormat;
+    vk::Format depthFormat; // Keep, but populated via vulkanDevice_
 
-    // Pipeline & Rendering
+    // Pipeline & Rendering (Keep)
     vk::RenderPass renderPass = nullptr;
     vk::DescriptorSetLayout descriptorSetLayout = nullptr;
     vk::PipelineLayout pipelineLayout = nullptr;
     vk::Pipeline graphicsPipeline = nullptr;
     vk::CommandPool commandPool = nullptr;
 
-    // Buffers & Memory
+    // Buffers & Memory (Keep)
     vk::Buffer vertexBuffer = nullptr;
     vk::DeviceMemory vertexBufferMemory = nullptr;
     vk::Buffer indexBuffer = nullptr;
@@ -248,7 +240,7 @@ private:
     std::vector<vk::DeviceMemory> uniformBuffersMemory;
     std::vector<void*> uniformBuffersMapped; // For UBO updates
 
-    // Descriptors
+    // Descriptors (Keep)
     vk::DescriptorPool descriptorPool = nullptr;
     std::vector<vk::DescriptorSet> descriptorSets;
 
@@ -262,70 +254,23 @@ private:
     std::vector<vk::Fence> inFlightFences;
     uint32_t currentFrame = 0;
 
-    bool framebufferResized = false; // Add this back!
+    bool framebufferResized = false; // Keep this!
 
     // Vertex Data (Keep for now)
     const std::vector<Vertex> vertices;
     const std::vector<uint16_t> indices;
 
-    // Camera controls (Keep for now)
-    glm::vec3 cameraPos = glm::vec3(0.0f, 0.0f, 3.0f);
-    glm::vec3 cameraFront = glm::vec3(0.0f, 0.0f, -1.0f);
-    glm::vec3 cameraUp = glm::vec3(0.0f, 1.0f, 0.0f);
-    float cameraSpeed = 2.5f; // Adjusted speed
-
-    // Mouse camera control (will be moved to Camera/Input class)
-    bool firstMouse = true; // Prevent jump on first capture
-    bool mouseCaptured = false;
-    float yaw = -90.0f;
-    float pitch = 0.0f;
-    float lastX = 0.0f; // Initialized in initWindow
-    float lastY = 0.0f; // Initialized in initWindow
-    float mouseSensitivity = 0.1f;
-
-    // Keyboard state (Keep for now)
-    bool keys[1024] = {0};
-
     // Timing (Keep for now)
     float deltaTime = 0.0f;
     float lastFrameTime = 0.0f;
 
-    // Validation Layers (Keep)
-    const std::vector<const char*> validationLayers = {
-        "VK_LAYER_KHRONOS_validation"
-    };
-    const std::vector<const char*> deviceExtensions = {
-        VK_KHR_SWAPCHAIN_EXTENSION_NAME
-    };
+    // Removed Validation Layers definitions (now in VulkanDevice)
+    // const std::vector<const char*> validationLayers = {...};
+    // const std::vector<const char*> deviceExtensions = {...};
+    // Removed enableValidationLayers toggle (passed to VulkanDevice)
+    // #ifdef NDEBUG ... #else ... #endif
 
-    #ifdef NDEBUG
-        const bool enableValidationLayers = false;
-    #else
-        const bool enableValidationLayers = true;
-    #endif
-
-    // --- Removed Input Members ---
-    // static std::array<bool, 1024> keys;
-    // static std::array<bool, 8> mouseButtons;
-    // static double lastX;
-    // static double lastY;
-    // static bool firstMouse;
-    // static bool mouseCaptured;
-    // static Camera* staticCameraPtr; // Removed static camera pointer
-
-    // --- Removed Static Callbacks ---
-    // static void keyCallback(GLFWwindow* window, int key, int scancode, int action, int mods);
-    // static void mouseButtonCallback(GLFWwindow* window, int button, int action, int mods);
-    // static void cursorPositionCallback(GLFWwindow* window, double xpos, double ypos);
-    // static void framebufferResizeCallback(GLFWwindow* window, int width, int height);
-
-    // --- Members ---
-    std::unique_ptr<InputManager> inputManager; // Input Manager instance
-    Camera camera; // Camera instance
-
-    // Helper functions
-    vk::Format findSupportedFormat(const std::vector<vk::Format>& candidates, vk::ImageTiling tiling, vk::FormatFeatureFlags features);
-    vk::Format findDepthFormat(); // NEW: Helper for depth format
+    // Removed old static members related to input/camera
 };
 
 } // namespace VulkanEngine 

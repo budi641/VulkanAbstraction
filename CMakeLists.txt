@@ -28,6 +28,7 @@ file(GLOB_RECURSE SOURCES
     "src/VulkanEngine/Window.cpp"
     "src/VulkanEngine/InputManager.cpp"
     "src/VulkanEngine/Camera.cpp"
+    "src/VulkanEngine/VulkanDevice.cpp"
 )
 
 # Create the executable
