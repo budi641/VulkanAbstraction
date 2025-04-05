@@ -10,11 +10,29 @@
 #include <string>
 #include <cstring> // For strcmp
 
-namespace VulkanEngine {
+// --- Global Proxy Function Definitions (Moved from Engine.cpp) ---
+// Use C API types for function pointers
+VkResult CreateDebugUtilsMessengerEXT(VkInstance instance, const VkDebugUtilsMessengerCreateInfoEXT* pCreateInfo, const VkAllocationCallbacks* pAllocator, VkDebugUtilsMessengerEXT* pDebugMessenger) {
+    auto func = (PFN_vkCreateDebugUtilsMessengerEXT)vkGetInstanceProcAddr(instance, "vkCreateDebugUtilsMessengerEXT");
+    if (func != nullptr) {
+        return func(instance, pCreateInfo, pAllocator, pDebugMessenger);
+    } else {
+        std::cerr << "[WARN] vkCreateDebugUtilsMessengerEXT extension not present!" << std::endl;
+        return VK_ERROR_EXTENSION_NOT_PRESENT;
+    }
+}
 
-// External C function pointers for debug messenger (defined in Engine.cpp or elsewhere)
-extern VkResult CreateDebugUtilsMessengerEXT(VkInstance instance, const VkDebugUtilsMessengerCreateInfoEXT* pCreateInfo, const VkAllocationCallbacks* pAllocator, VkDebugUtilsMessengerEXT* pDebugMessenger);
-extern void DestroyDebugUtilsMessengerEXT(VkInstance instance, VkDebugUtilsMessengerEXT debugMessenger, const VkAllocationCallbacks* pAllocator);
+void DestroyDebugUtilsMessengerEXT(VkInstance instance, VkDebugUtilsMessengerEXT debugMessenger, const VkAllocationCallbacks* pAllocator) {
+    auto func = (PFN_vkDestroyDebugUtilsMessengerEXT)vkGetInstanceProcAddr(instance, "vkDestroyDebugUtilsMessengerEXT");
+    if (func != nullptr) {
+        func(instance, debugMessenger, pAllocator);
+    } else {
+        std::cerr << "[WARN] vkDestroyDebugUtilsMessengerEXT extension not present!" << std::endl;
+    }
+}
+// --- End Global Proxy Functions ---
+
+namespace VulkanEngine {
 
 // Helper function (can remain static or become a member)
 static VKAPI_ATTR VkBool32 VKAPI_CALL debugCallback(
@@ -38,13 +56,20 @@ VulkanDevice::VulkanDevice(Window& window, bool enableValidationLayers)
 }
 
 VulkanDevice::~VulkanDevice() {
-    if (device_) device_.destroy();
-    if (enableValidationLayers_ && debugMessenger_) {
-        // Use C proxy function, rely on implicit conversion for messenger
-        DestroyDebugUtilsMessengerEXT(instance_, debugMessenger_, nullptr);
+    // Device needs to be destroyed before instance
+    if (device_) {
+        device_.destroy();
     }
-    if (surface_) instance_.destroySurfaceKHR(surface_);
-    if (instance_) instance_.destroy();
+    if (enableValidationLayers_ && debugMessenger_) {
+        // Use global scope operator :: for the C proxy function
+        ::DestroyDebugUtilsMessengerEXT(instance_, debugMessenger_, nullptr); 
+    }
+    if (surface_) {
+        instance_.destroySurfaceKHR(surface_);
+    }
+    if (instance_) {
+        instance_.destroy();
+    }
 }
 
 void VulkanDevice::createInstance() {
@@ -67,24 +92,24 @@ void VulkanDevice::createInstance() {
     createInfo.enabledExtensionCount = static_cast<uint32_t>(extensions.size());
     createInfo.ppEnabledExtensionNames = extensions.data();
 
-    vk::DebugUtilsMessengerCreateInfoEXT debugCreateInfo; // Use C++ type
+    // Use C struct directly to avoid C++ wrapper assignment issue
+    VkDebugUtilsMessengerCreateInfoEXT c_debugCreateInfo{}; 
     if (enableValidationLayers_) {
         createInfo.enabledLayerCount = static_cast<uint32_t>(validationLayers_.size());
         createInfo.ppEnabledLayerNames = validationLayers_.data();
 
-        // Populate C++ struct
-        debugCreateInfo.sType = vk::StructureType::eDebugUtilsMessengerCreateInfoEXT;
-        debugCreateInfo.messageSeverity = vk::DebugUtilsMessageSeverityFlagBitsEXT::eVerbose |
-                                        vk::DebugUtilsMessageSeverityFlagBitsEXT::eWarning |
-                                        vk::DebugUtilsMessageSeverityFlagBitsEXT::eError;
-        debugCreateInfo.messageType = vk::DebugUtilsMessageTypeFlagBitsEXT::eGeneral |
-                                    vk::DebugUtilsMessageTypeFlagBitsEXT::eValidation |
-                                    vk::DebugUtilsMessageTypeFlagBitsEXT::ePerformance;
-        // Cast the static C callback to the C++ function pointer type
-        debugCreateInfo.pfnUserCallback = reinterpret_cast<vk::PFN_DebugUtilsMessengerCallbackEXT>(debugCallback);
-        debugCreateInfo.pUserData = nullptr;
+        // Populate C struct directly
+        c_debugCreateInfo.sType = VK_STRUCTURE_TYPE_DEBUG_UTILS_MESSENGER_CREATE_INFO_EXT;
+        c_debugCreateInfo.messageSeverity = VK_DEBUG_UTILS_MESSAGE_SEVERITY_VERBOSE_BIT_EXT |
+                                            VK_DEBUG_UTILS_MESSAGE_SEVERITY_WARNING_BIT_EXT |
+                                            VK_DEBUG_UTILS_MESSAGE_SEVERITY_ERROR_BIT_EXT;
+        c_debugCreateInfo.messageType = VK_DEBUG_UTILS_MESSAGE_TYPE_GENERAL_BIT_EXT |
+                                        VK_DEBUG_UTILS_MESSAGE_TYPE_VALIDATION_BIT_EXT |
+                                        VK_DEBUG_UTILS_MESSAGE_TYPE_PERFORMANCE_BIT_EXT;
+        c_debugCreateInfo.pfnUserCallback = debugCallback; // Direct assignment to C type should work
+        c_debugCreateInfo.pUserData = nullptr;
 
-        createInfo.pNext = &debugCreateInfo; // Assign address to void*
+        createInfo.pNext = &c_debugCreateInfo; // Assign address of C struct to void*
     } else {
         createInfo.enabledLayerCount = 0;
         createInfo.ppEnabledLayerNames = nullptr;
@@ -97,22 +122,22 @@ void VulkanDevice::createInstance() {
 void VulkanDevice::setupDebugMessenger() {
     if (!enableValidationLayers_) return;
 
-    // Populate the C struct needed by the proxy function
-    VkDebugUtilsMessengerCreateInfoEXT createInfo{};
-    createInfo.sType = VK_STRUCTURE_TYPE_DEBUG_UTILS_MESSENGER_CREATE_INFO_EXT;
-    createInfo.messageSeverity = VK_DEBUG_UTILS_MESSAGE_SEVERITY_VERBOSE_BIT_EXT |
-                               VK_DEBUG_UTILS_MESSAGE_SEVERITY_WARNING_BIT_EXT |
-                               VK_DEBUG_UTILS_MESSAGE_SEVERITY_ERROR_BIT_EXT;
-    createInfo.messageType = VK_DEBUG_UTILS_MESSAGE_TYPE_GENERAL_BIT_EXT |
-                           VK_DEBUG_UTILS_MESSAGE_TYPE_VALIDATION_BIT_EXT |
-                           VK_DEBUG_UTILS_MESSAGE_TYPE_PERFORMANCE_BIT_EXT;
-    createInfo.pfnUserCallback = debugCallback; // Use the static C callback directly
-    createInfo.pUserData = nullptr;
+    vk::DebugUtilsMessengerCreateInfoEXT createInfo;
+    createInfo.messageSeverity = vk::DebugUtilsMessageSeverityFlagBitsEXT::eVerbose | vk::DebugUtilsMessageSeverityFlagBitsEXT::eWarning | vk::DebugUtilsMessageSeverityFlagBitsEXT::eError;
+    createInfo.messageType = vk::DebugUtilsMessageTypeFlagBitsEXT::eGeneral | vk::DebugUtilsMessageTypeFlagBitsEXT::eValidation | vk::DebugUtilsMessageTypeFlagBitsEXT::ePerformance;
+    createInfo.pfnUserCallback = reinterpret_cast<vk::PFN_DebugUtilsMessengerCallbackEXT>(debugCallback);
+    createInfo.pUserData = nullptr; // Optional
 
-    // Call the C proxy function
-    if (CreateDebugUtilsMessengerEXT(instance_, &createInfo, nullptr, reinterpret_cast<VkDebugUtilsMessengerEXT*>(&debugMessenger_)) != VK_SUCCESS) {
+    // Use C proxy function with global scope operator ::
+    VkDebugUtilsMessengerEXT c_debugMessenger;
+    VkInstance c_instance = instance_; // Implicit conversion
+    VkResult result = ::CreateDebugUtilsMessengerEXT(c_instance, reinterpret_cast<const VkDebugUtilsMessengerCreateInfoEXT*>(&createInfo), nullptr, &c_debugMessenger);
+    
+    if (result != VK_SUCCESS) {
         throw std::runtime_error("Failed to set up debug messenger!");
     }
+    // Convert back to C++ wrapper
+    debugMessenger_ = vk::DebugUtilsMessengerEXT(c_debugMessenger);
 }
 
 void VulkanDevice::createSurface() {
@@ -298,5 +323,58 @@ vk::Format VulkanDevice::findDepthFormat() const {
         vk::FormatFeatureFlagBits::eDepthStencilAttachment
     );
 }
+
+// --- Swap Chain Helper Definitions (Moved from Engine) ---
+vk::SurfaceFormatKHR VulkanDevice::chooseSwapSurfaceFormat(const std::vector<vk::SurfaceFormatKHR>& availableFormats) const {
+    for (const auto& availableFormat : availableFormats) {
+        if (availableFormat.format == vk::Format::eB8G8R8A8Srgb && availableFormat.colorSpace == vk::ColorSpaceKHR::eSrgbNonlinear) {
+            return availableFormat;
+        }
+    }
+    // Fallback to the first available format if the preferred one isn't found
+    if (!availableFormats.empty()) {
+         return availableFormats[0];
+    } else {
+        throw std::runtime_error("No surface formats available!");
+    }
+}
+
+vk::PresentModeKHR VulkanDevice::chooseSwapPresentMode(const std::vector<vk::PresentModeKHR>& availablePresentModes) const {
+    for (const auto& availablePresentMode : availablePresentModes) {
+        if (availablePresentMode == vk::PresentModeKHR::eMailbox) {
+            return availablePresentMode; // Prefer mailbox for low latency
+        }
+    }
+    // FIFO is guaranteed to be available
+    return vk::PresentModeKHR::eFifo; 
+}
+
+// --- End Swap Chain Helper Definitions ---
+
+// --- Add Missing Swap Chain Helper Definitions ---
+
+// Private querySwapChainSupport overload definition
+SwapChainSupportDetails VulkanDevice::querySwapChainSupport(vk::PhysicalDevice queryDevice) const {
+    SwapChainSupportDetails details;
+    // Ensure surface_ is valid before querying
+    if (!surface_) {
+        throw std::runtime_error("Cannot query swap chain support without a valid surface!");
+    }
+    details.capabilities = queryDevice.getSurfaceCapabilitiesKHR(surface_);
+    details.formats = queryDevice.getSurfaceFormatsKHR(surface_);
+    details.presentModes = queryDevice.getSurfacePresentModesKHR(surface_);
+    return details;
+}
+
+// Public querySwapChainSupport definition (calls private one with member physicalDevice_)
+SwapChainSupportDetails VulkanDevice::querySwapChainSupport() const {
+    // Ensure physicalDevice_ is valid before querying
+    if (!physicalDevice_) {
+         throw std::runtime_error("Cannot query swap chain support without a valid physical device!");
+    }
+    return querySwapChainSupport(physicalDevice_);
+}
+
+// --- End Missing Definitions ---
 
 } // namespace VulkanEngine 

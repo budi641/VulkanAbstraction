@@ -63,12 +63,6 @@ struct VkDebugUtilsMessengerCallbackDataEXT;
 namespace VulkanEngine {
 
 // Structs moved from main.cpp (or potentially becoming classes later)
-struct SwapChainSupportDetails {
-    vk::SurfaceCapabilitiesKHR capabilities;
-    std::vector<vk::SurfaceFormatKHR> formats;
-    std::vector<vk::PresentModeKHR> presentModes;
-};
-
 struct Vertex {
     glm::vec3 pos;
     glm::vec3 color;
@@ -160,57 +154,37 @@ private:
     void recordCommandBuffer(vk::CommandBuffer commandBuffer, uint32_t imageIndex);
     void updateUniformBuffer(uint32_t currentImage);
 
-    // Vulkan Helpers (Removed redundant ones)
-    // bool checkValidationLayerSupport();
-    // std::vector<const char*> getRequiredExtensions();
-    // bool isDeviceSuitable(vk::PhysicalDevice device);
-    // bool checkDeviceExtensionSupport(vk::PhysicalDevice device);
-    // QueueFamilyIndices findQueueFamilies(vk::PhysicalDevice device);
-    SwapChainSupportDetails querySwapChainSupport(vk::PhysicalDevice device); // Keep this for now
-    vk::SurfaceFormatKHR chooseSwapSurfaceFormat(const std::vector<vk::SurfaceFormatKHR>& availableFormats);
-    vk::PresentModeKHR chooseSwapPresentMode(const std::vector<vk::PresentModeKHR>& availablePresentModes);
-    vk::Extent2D chooseSwapExtent(const vk::SurfaceCapabilitiesKHR& capabilities);
-    vk::ShaderModule createShaderModule(const std::vector<char>& code);
-    uint32_t findMemoryType(uint32_t typeFilter, vk::MemoryPropertyFlags properties);
-    void createBuffer(vk::DeviceSize size, vk::BufferUsageFlags usage, vk::MemoryPropertyFlags properties, vk::Buffer& buffer, vk::DeviceMemory& bufferMemory);
-    void copyBuffer(vk::Buffer srcBuffer, vk::Buffer dstBuffer, vk::DeviceSize size);
-    // Command buffer helpers (potential extraction)
+    // Vulkan Helpers (Removed more redundant ones)
+    // REMOVED: querySwapChainSupport (moved to VulkanDevice)
+    // REMOVED: chooseSwapSurfaceFormat (moved to VulkanDevice)
+    // REMOVED: chooseSwapPresentMode (moved to VulkanDevice)
+    vk::Extent2D chooseSwapExtent(const vk::SurfaceCapabilitiesKHR& capabilities); // KEEP here
+    vk::ShaderModule createShaderModule(const std::vector<char>& code); // Keep
+    uint32_t findMemoryType(uint32_t typeFilter, vk::MemoryPropertyFlags properties); // Keep
+    void createBuffer(vk::DeviceSize size, vk::BufferUsageFlags usage, vk::MemoryPropertyFlags properties, vk::Buffer& buffer, vk::DeviceMemory& bufferMemory); // Keep
+    void copyBuffer(vk::Buffer srcBuffer, vk::Buffer dstBuffer, vk::DeviceSize size); // Keep
+    // Command buffer helpers (keep)
     vk::CommandBuffer beginSingleTimeCommands();
     void endSingleTimeCommands(vk::CommandBuffer commandBuffer);
-    // Removed: findSupportedFormat, findDepthFormat
 
-    // Input Handling (Still here for now, depends on Window)
-    void processInput(float deltaTime); // New method for input handling
-    void updateCameraVectors(); // Keep for now
-    // Removed framebufferResizeCallback, handled by Window class
-    // static void framebufferResizeCallback(GLFWwindow* window, int width, int height);
-    // Input callbacks remain for now, but need adjustment
+    // Input Handling
+    void processInput(float deltaTime);
+    void updateCameraVectors();
+    // Input callbacks
     static void keyCallback(GLFWwindow* window, int key, int scancode, int action, int mods);
     static void mouseButtonCallback(GLFWwindow* window, int button, int action, int mods);
     static void cursorPositionCallback(GLFWwindow* window, double xpos, double ypos);
 
     // Static Helpers
     std::vector<char> readFile(const std::string& filename);
-    // Removed static debugCallback declaration
-    // static VKAPI_ATTR VkBool32 VKAPI_CALL debugCallback(...);
 
     // --- Member Variables --- //
-    // Removed applicationName
-    std::unique_ptr<Window> window_; // Use unique_ptr for ownership, ensure underscore suffix
-    std::unique_ptr<InputManager> inputManager_; // Ensure underscore suffix
-    Camera camera; // Camera instance
-    std::unique_ptr<VulkanDevice> vulkanDevice_; // Add VulkanDevice member
+    std::unique_ptr<Window> window_; 
+    std::unique_ptr<InputManager> inputManager_;
+    Camera camera; 
+    std::unique_ptr<VulkanDevice> vulkanDevice_;
 
-    // Vulkan Core Objects (Removed members handled by VulkanDevice)
-    // vk::Instance instance = nullptr;
-    // vk::DebugUtilsMessengerEXT debugMessenger = nullptr;
-    // vk::SurfaceKHR surface = nullptr;
-    // vk::PhysicalDevice physicalDevice = nullptr;
-    // vk::Device device = nullptr;
-    // vk::Queue graphicsQueue = nullptr;
-    // vk::Queue presentQueue = nullptr;
-
-    // Swap Chain (Keep these)
+    // Swap Chain
     vk::SwapchainKHR swapChain = nullptr;
     std::vector<vk::Image> swapChainImages;
     vk::Format swapChainImageFormat;

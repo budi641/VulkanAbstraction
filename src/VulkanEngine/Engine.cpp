@@ -20,27 +20,7 @@
 
 #include <glm/gtc/matrix_transform.hpp>
 
-// --- Define Global Proxy Functions (Still Needed for Debug Messenger) ---
-// These use the C API types because they bridge to the C loader function
-VkResult CreateDebugUtilsMessengerEXT(VkInstance instance, const VkDebugUtilsMessengerCreateInfoEXT* pCreateInfo, const VkAllocationCallbacks* pAllocator, VkDebugUtilsMessengerEXT* pDebugMessenger) {
-    auto func = (PFN_vkCreateDebugUtilsMessengerEXT)vkGetInstanceProcAddr(instance, "vkCreateDebugUtilsMessengerEXT");
-    if (func != nullptr) {
-        return func(instance, pCreateInfo, pAllocator, pDebugMessenger);
-    } else {
-        std::cerr << "[WARN] vkCreateDebugUtilsMessengerEXT extension not present!" << std::endl;
-        return VK_ERROR_EXTENSION_NOT_PRESENT;
-    }
-}
-
-void DestroyDebugUtilsMessengerEXT(VkInstance instance, VkDebugUtilsMessengerEXT debugMessenger, const VkAllocationCallbacks* pAllocator) {
-    auto func = (PFN_vkDestroyDebugUtilsMessengerEXT)vkGetInstanceProcAddr(instance, "vkDestroyDebugUtilsMessengerEXT");
-    if (func != nullptr) {
-        func(instance, debugMessenger, pAllocator);
-    } else {
-         std::cerr << "[WARN] vkDestroyDebugUtilsMessengerEXT extension not present!" << std::endl;
-    }
-}
-// --- End Global Proxy Functions ---
+// --- REMOVED Global Proxy Function Definitions (Moved to VulkanDevice.cpp) ---
 
 namespace VulkanEngine {
 
@@ -69,19 +49,6 @@ std::vector<char> Engine::readFile(const std::string& filename) {
     return buffer;
 }
 
-// debugCallback implementation (uses C API types due to callback signature)
-VKAPI_ATTR VkBool32 VKAPI_CALL Engine::debugCallback(
-    VkDebugUtilsMessageSeverityFlagBitsEXT messageSeverity,
-    VkDebugUtilsMessageTypeFlagsEXT messageType,
-    const VkDebugUtilsMessengerCallbackDataEXT* pCallbackData,
-    void* pUserData) {
-    // Filter out less important messages if desired
-    // if (messageSeverity >= VK_DEBUG_UTILS_MESSAGE_SEVERITY_WARNING_BIT_EXT) {
-        std::cerr << "Validation layer: " << pCallbackData->pMessage << std::endl;
-    // }
-    return VK_FALSE;
-}
-
 //-------------------------------------------------
 // Engine Class Implementation
 //-------------------------------------------------
@@ -90,7 +57,12 @@ Engine::Engine(int width, int height, const std::string& title)
     : window_(std::make_unique<Window>(width, height, title)),
       inputManager_(std::make_unique<InputManager>()),
       camera(glm::vec3(0.0f, 0.0f, 3.0f)),
-      vulkanDevice_(std::make_unique<VulkanDevice>(*window_, enableValidationLayers_)),
+// Determine validation layer setting based on build type
+#ifdef NDEBUG
+      vulkanDevice_(std::make_unique<VulkanDevice>(*window_, false)), // Release: validation off
+#else
+      vulkanDevice_(std::make_unique<VulkanDevice>(*window_, true)),  // Debug: validation on
+#endif
       vertices({
           // Front face (red)
           {{-0.5f, -0.5f, -0.5f}, {1.0f, 0.0f, 0.0f}},
@@ -203,17 +175,24 @@ void Engine::mainLoop() {
 }
 
 void Engine::initVulkan() {
-    // Vulkan instance/device setup is handled by VulkanDevice constructor
+    // Instance, Debug Messenger, Surface, Physical Device, Logical Device
+    // are now created within VulkanDevice constructor.
 
-    // Create resources that depend on the VulkanDevice
+    // REMOVED: createInstance();
+    // REMOVED: setupDebugMessenger();
+    // REMOVED: createSurface();
+    // REMOVED: pickPhysicalDevice();
+    // REMOVED: createLogicalDevice();
+
+    // Remaining setup using the created VulkanDevice
     createSwapChain();
     createImageViews();
-    createDepthResources();
     createRenderPass();
     createDescriptorSetLayout();
     createGraphicsPipeline();
-    createFramebuffers();
     createCommandPool();
+    createDepthResources(); // Create depth resources after command pool
+    createFramebuffers();
     createVertexBuffer();
     createIndexBuffer();
     createUniformBuffers();
@@ -230,10 +209,10 @@ void Engine::createSwapChain() {
     vk::Device device = vulkanDevice_->getDevice();
     vk::SurfaceKHR surface = vulkanDevice_->getSurface();
 
-    SwapChainSupportDetails swapChainSupport = querySwapChainSupport(physicalDevice);
-    vk::SurfaceFormatKHR surfaceFormat = chooseSwapSurfaceFormat(swapChainSupport.formats);
-    vk::PresentModeKHR presentMode = chooseSwapPresentMode(swapChainSupport.presentModes);
-    vk::Extent2D extent = chooseSwapExtent(swapChainSupport.capabilities);
+    SwapChainSupportDetails swapChainSupport = vulkanDevice_->querySwapChainSupport();
+    vk::SurfaceFormatKHR surfaceFormat = vulkanDevice_->chooseSwapSurfaceFormat(swapChainSupport.formats);
+    vk::PresentModeKHR presentMode = vulkanDevice_->chooseSwapPresentMode(swapChainSupport.presentModes);
+    vk::Extent2D extent = this->chooseSwapExtent(swapChainSupport.capabilities);
 
     uint32_t imageCount = swapChainSupport.capabilities.minImageCount + 1;
     if (swapChainSupport.capabilities.maxImageCount > 0 && imageCount > swapChainSupport.capabilities.maxImageCount) {
@@ -932,5 +911,27 @@ void Engine::createDepthResources() {
     // Note: Image layout transition is often handled implicitly by the render pass
     // or can be done explicitly here using begin/endSingleTimeCommands if needed.
 }
+
+// --- Swap Chain Helper Definitions (Keep chooseSwapExtent here) ---
+vk::Extent2D Engine::chooseSwapExtent(const vk::SurfaceCapabilitiesKHR& capabilities) {
+    if (capabilities.currentExtent.width != std::numeric_limits<uint32_t>::max()) {
+        return capabilities.currentExtent;
+    } else {
+        int width, height;
+        // Use window_ member
+        glfwGetFramebufferSize(window_->getGLFWwindow(), &width, &height);
+
+        vk::Extent2D actualExtent = {
+            static_cast<uint32_t>(width),
+            static_cast<uint32_t>(height)
+        };
+
+        actualExtent.width = std::clamp(actualExtent.width, capabilities.minImageExtent.width, capabilities.maxImageExtent.width);
+        actualExtent.height = std::clamp(actualExtent.height, capabilities.minImageExtent.height, capabilities.maxImageExtent.height);
+
+        return actualExtent;
+    }
+}
+// --- End Swap Chain Helper Definitions ---
 
 } // namespace VulkanEngine

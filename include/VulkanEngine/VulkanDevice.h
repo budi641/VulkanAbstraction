@@ -4,18 +4,20 @@
 #include <vector>
 #include <string>
 #include <optional>
+#include <stdexcept>
+#include <iostream>
+#include <set>
 
-#include "VulkanEngine/Window.h" // Needs window for surface interaction
-
-// Forward declare structs defined elsewhere (or move them here/to a common header)
+// Forward declarations
 namespace VulkanEngine {
-struct QueueFamilyIndices;
+class Window; // Use forward declaration instead of include if possible
+struct QueueFamilyIndices; // Forward declare if definition is elsewhere
 }
 
 namespace VulkanEngine {
 
-// Keep QueueFamilyIndices definition ONLY here
-struct QueueFamilyIndices {
+// --- Structs moved/defined here --- 
+struct QueueFamilyIndices { // Keep definition here
     std::optional<uint32_t> graphicsFamily;
     std::optional<uint32_t> presentFamily;
 
@@ -23,6 +25,14 @@ struct QueueFamilyIndices {
         return graphicsFamily.has_value() && presentFamily.has_value();
     }
 };
+
+// Moved from Engine.h
+struct SwapChainSupportDetails { 
+    vk::SurfaceCapabilitiesKHR capabilities;
+    std::vector<vk::SurfaceFormatKHR> formats;
+    std::vector<vk::PresentModeKHR> presentModes;
+};
+// --- End Structs ---
 
 class VulkanDevice {
 public:
@@ -43,13 +53,14 @@ public:
     vk::SurfaceKHR getSurface() const { return surface_; }
     bool validationLayersEnabled() const { return enableValidationLayers_; }
     QueueFamilyIndices getQueueFamilyIndices() const { return queueFamilyIndices_; }
-    // Add getter for debug messenger
     vk::DebugUtilsMessengerEXT getDebugMessenger() const { return debugMessenger_; }
+    vk::Format findDepthFormat() const;
 
-    // Expose necessary helper results
-    // SwapChainSupportDetails querySwapChainSupport() const; // Might move this later
-    // vk::Format findSupportedFormat(...) const; // Might move this later
-    // uint32_t findMemoryType(...) const; // Might move this later
+    // --- Swap Chain Helpers (Moved from Engine) --- 
+    SwapChainSupportDetails querySwapChainSupport() const; 
+    vk::SurfaceFormatKHR chooseSwapSurfaceFormat(const std::vector<vk::SurfaceFormatKHR>& availableFormats) const;
+    vk::PresentModeKHR chooseSwapPresentMode(const std::vector<vk::PresentModeKHR>& availablePresentModes) const;
+    // chooseSwapExtent remains in Engine as it needs window size
 
 private:
     void createInstance();
@@ -58,17 +69,15 @@ private:
     void pickPhysicalDevice();
     void createLogicalDevice();
 
-    // Helpers moved from Engine
+    // Helpers moved from Engine or internal
     bool checkValidationLayerSupport() const;
     std::vector<const char*> getRequiredExtensions() const;
     bool isDeviceSuitable(vk::PhysicalDevice physicalDevice) const;
     QueueFamilyIndices findQueueFamilies(vk::PhysicalDevice physicalDevice) const;
     bool checkDeviceExtensionSupport(vk::PhysicalDevice physicalDevice) const;
     vk::Format findSupportedFormat(const std::vector<vk::Format>& candidates, vk::ImageTiling tiling, vk::FormatFeatureFlags features) const;
-    vk::Format findDepthFormat() const;
-
-    // Keep debug callback static or global (C interface)
-    // static VKAPI_ATTR VkBool32 VKAPI_CALL debugCallback(...);
+    // Overload for querySwapChainSupport taking device explicitly
+    SwapChainSupportDetails querySwapChainSupport(vk::PhysicalDevice physicalDevice) const; 
 
     // Members
     Window& window_; // Reference to the window
